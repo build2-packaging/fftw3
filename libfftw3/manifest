@@ -31,6 +31,7 @@ openmp-builds: &gcc -windows ; GCC-class compiler, not Windows.
 openmp-build-config: config.libfftw3.openmp=true ; Build the OpenMP library.
 
 quad-builds: &gcc ; GCC-class compiler.
+quad-build-exclude: linux_fedora** ; See quad-fedora.
 quad-build-include: **/x86_64-**
 quad-build-include: **/i?86-**
 quad-build-exclude: ** ; GCC on x86 or x86_64 only.
@@ -39,4 +40,18 @@ quad-build-config:
 config.libfftw3.quad_precision=true
 ;
 Build the quad precision library.
+\
+
+quad-fedora-builds: &gcc ; GCC-class compiler.
+quad-fedora-build-include: linux_fedora**-bindist/x86_64-**
+quad-fedora-build-exclude: ** ; Fedora with sudo on x86_64 only.
+quad-fedora-build-config:
+\
+config.libfftw3.quad_precision=true
+bpkg.configure.build:--sys-install
+bpkg.configure.build:--sys-yes
+bpkg.configure.build:--sys-no-stub
+sys:libquadmath
+;
+Build the quad precision library, installing libquadmath-devel.
 \
