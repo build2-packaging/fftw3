@@ -71,6 +71,18 @@ c.poptions =+ "-I$src_pfx"
 if ($c.target.class != 'windows')
   c.libs += -lm
 
+# The Windows runtime deprecates fopen(), which upstream uses to import and
+# export wisdom.
+#
+if ($c.target.system == 'win32-msvc')
+  c.poptions += -D_CRT_SECURE_NO_WARNINGS
+
+# Upstream converts the integer operation counts and alike to double, which
+# MSVC diagnoses as a possible loss of data.
+#
+if ($c.class == 'msvc')
+  c.coptions += /wd4244
+
 # On Windows the threads are combined into the precision libraries (see
 # root.build for details).
 #
@@ -209,18 +221,25 @@ for p: fftw3 fftw3f fftw3l fftw3q
     if ($c.id == 'gcc' && $c.target.class == 'windows' && $i != 'sse2')
       f += -Wa,-muse-unaligned-vector-move
 
-    # The AVX loads fill the halves of a vector one at a time, starting from
+    # The x86 loads fill the halves of a vector one at a time, starting from
     # an uninitialized one (see simd-support/simd-avx.h), which GCC and Clang
-    # diagnose. The codelets also trigger the same warning as the scalar ones
+    # diagnose (for SSE2 only without inline assembly, as with Clang targeting
+    # MSVC). The codelets also trigger the same warning as the scalar ones
     # (see below).
+    #
+    # The AVX codelets initialize the single precision vector constants with
+    # double literals (see VLIT() in simd-support/simd-avx.h), which MSVC
+    # diagnoses as truncation.
     #
     if ($c.class == 'gcc')
     {
       f += -Wno-unused-value
 
-      if $regex.match($i, 'avx(2|2-128|-128-fma)?')
+      if $regex.match($i, 'sse2|avx(2|2-128|-128-fma)?')
         f += -Wno-uninitialized
     }
+    elif ($c.class == 'msvc' && $regex.match($i, 'avx(2|2-128|512)?'))
+      f += /wd4305
 
     $d/dft/simd/$i/
     {
@@ -280,6 +299,12 @@ for p: fftw3 fftw3f fftw3l fftw3q
 
   if ($c.target.class != 'windows')
     lib{$(p)_threads}: c.libs += -pthread
+
+  # The Windows threads use a variable only in an assertion, which is
+  # disabled without FFTW_DEBUG.
+  #
+  if ($c.class == 'gcc' && $c.target.class == 'windows')
+    $d/threads/obj{threads}: c.coptions += -Wno-unused-variable
 
   # Note that GCC ignores the OpenMP pragmas when compiling the source that
   # we have preprocessed with -fdirectives-only (and so the library would
