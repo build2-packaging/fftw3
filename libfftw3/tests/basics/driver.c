@@ -64,7 +64,7 @@ int main ()
 
     for (int k = 0; k != 4; ++k)
     {
-      i[k][0] = k + 1;
+      i[k][0] = (R) (k + 1);
       i[k][1] = 0;
     }
 
@@ -96,13 +96,13 @@ int main ()
     assert (f != NULL && b != NULL);
 
     for (int k = 0; k != n; ++k)
-      r[k] = k % 7 - 3;
+      r[k] = (R) (k % 7 - 3);
 
     X(execute) (f);
     X(execute) (b);
 
     for (int k = 0; k != n; ++k)
-      assert (equal (r[k] / n, k % 7 - 3));
+      assert (equal (r[k] / n, (R) (k % 7 - 3)));
 
     X(destroy_plan) (b);
     X(destroy_plan) (f);
