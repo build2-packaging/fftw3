@@ -27,10 +27,12 @@ config.libfftw3.threads=true
 Build the single and long double precision and the threads libraries.
 \
 
-openmp-builds: &gcc -windows ; GCC-class compiler, not Windows.
+openmp-builds: &( +gcc +clang ) ; GCC or Clang.
+openmp-builds: -windows         ; Not supported on Windows.
+openmp-builds: -macos           ; No OpenMP runtime with Apple Clang.
 openmp-build-config: config.libfftw3.openmp=true ; Build the OpenMP library.
 
-quad-builds: &gcc ; GCC-class compiler.
+quad-builds: &gcc ; GCC.
 quad-build-exclude: linux_fedora** ; See quad-fedora.
 quad-build-include: **/x86_64-**
 quad-build-include: **/i?86-**
@@ -42,7 +44,7 @@ config.libfftw3.quad_precision=true
 Build the quad precision library.
 \
 
-quad-fedora-builds: &gcc ; GCC-class compiler.
+quad-fedora-builds: &gcc ; GCC.
 quad-fedora-build-include: linux_fedora**-bindist/x86_64-**
 quad-fedora-build-exclude: ** ; Fedora with sudo on x86_64 only.
 quad-fedora-build-config:
