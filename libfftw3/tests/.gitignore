@@ -1,6 +1,6 @@
 # Test executables.
 #
-driver
+fftw3*
 
 # Testscript output directories (can be symlinks).
 #

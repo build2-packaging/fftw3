@@ -1,3 +1,41 @@
-import libs = libfftw3%lib{fftw3}
+import! [metadata, rule_hint=c.link] fftw3 = libfftw3%lib{fftw3}
 
-exe{driver}: {h c}{**} $libs testscript{**}
+# Test every library in the configuration (see the libfftw3.* metadata) with
+# the same driver, building an executable named after each library.
+#
+precisions = fftw3
+precisions += ($($fftw3: libfftw3.single)         ? fftw3f : )
+precisions += ($($fftw3: libfftw3.long_double)    ? fftw3l : )
+precisions += ($($fftw3: libfftw3.quad_precision) ? fftw3q : )
+
+for p: $precisions
+{
+  switch $p
+  {
+    case 'fftw3f'
+      m = -DTEST_FLOAT
+    case 'fftw3l'
+      m = -DTEST_LONG_DOUBLE
+    case 'fftw3q'
+      m = -DTEST_QUAD
+    default
+      m =
+  }
+
+  libs = $p
+  libs += ($($fftw3: libfftw3.threads) ? $(p)_threads : )
+  libs += ($($fftw3: libfftw3.openmp)  ? $(p)_omp     : )
+
+  for l: $libs
+  {
+    # The threads API may be provided by the precision library.
+    #
+    c = ($l == "$(p)_threads" && $($fftw3: libfftw3.combined_threads))
+
+    import lib = libfftw3%lib{($c ? $p : $l)}
+
+    ./: exe{$l}: obje{$l} $lib
+    obje{$l}: c{driver} $lib
+    obje{$l}: c.poptions += $m ($l != $p ? -DTEST_THREADS : )
+  }
+}
