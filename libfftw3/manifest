@@ -3,14 +3,40 @@ name: libfftw3
 version: 3.3.10-a.0.z
 language: c
 project: fftw3
-summary: fftw3 C library
-license: GPL-2.0-only ; GNU General Public License v2.0 only.
+summary: Discrete Fourier transform C library
+license: GPL-2.0-or-later ; GNU General Public License v2.0 or later.
+topics: discrete Fourier transform, FFT, DFT, DCT, signal processing
 description-file: README
 package-description-file: PACKAGE-README.md
 changes-file: NEWS
-url: https://example.org/upstream
-email: upstream@example.org
+url: https://www.fftw.org/
+doc-url: https://www.fftw.org/fftw3_doc/
+src-url: https://github.com/FFTW/fftw3
+email: fftw@fftw.org
 package-url: https://github.com/build2-packaging/fftw3
 package-email: packaging@build2.org ; Mailing list.
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
+
+extras-build-config:
+\
+config.libfftw3.single=true
+config.libfftw3.long_double=true
+config.libfftw3.threads=true
+;
+Build the single and long double precision and the threads libraries.
+\
+
+openmp-builds: &gcc -windows ; GCC-class compiler, not Windows.
+openmp-build-config: config.libfftw3.openmp=true ; Build the OpenMP library.
+
+quad-builds: &gcc ; GCC-class compiler.
+quad-build-include: **/x86_64-**
+quad-build-include: **/i?86-**
+quad-build-exclude: ** ; GCC on x86 or x86_64 only.
+quad-build-config:
+\
+config.libfftw3.quad_precision=true
+;
+Build the quad precision library.
+\
