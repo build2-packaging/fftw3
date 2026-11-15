@@ -27,9 +27,10 @@ config.libfftw3.threads=true
 Build the single and long double precision and the threads libraries.
 \
 
-openmp-builds: &( +gcc +clang ) ; GCC or Clang.
-openmp-builds: -windows         ; Not supported on Windows.
-openmp-builds: -macos           ; No OpenMP runtime with Apple Clang.
+openmp-builds: &( +gcc +clang )                  ; GCC or Clang.
+openmp-builds: -windows                          ; Not supported on Windows.
+openmp-builds: -macos                            ; No OpenMP runtime with Apple Clang.
+openmp-build-exclude: linux_debian**-clang**     ; No OpenMP runtime with Clang on Debian.
 openmp-build-config: config.libfftw3.openmp=true ; Build the OpenMP library.
 
 quad-builds: &gcc ; GCC.
