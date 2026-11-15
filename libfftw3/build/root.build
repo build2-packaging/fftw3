@@ -10,3 +10,108 @@ c{*}: extension = c
 # The test target for cross-testing (running tests under Wine, etc).
 #
 test.target = $c.target
+
+# Precisions.
+#
+# Upstream builds one precision per configuration (double by default) and
+# names each library after it: libfftw3 (double), libfftw3f (float),
+# libfftw3l (long double), and libfftw3q (quad precision, __float128). We
+# always build the double precision library and the others on request. If
+# these variables are true, build the corresponding library.
+#
+config [bool] config.libfftw3.single         ?= false
+config [bool] config.libfftw3.long_double    ?= false
+config [bool] config.libfftw3.quad_precision ?= false
+
+# Multi-threading.
+#
+# If these variables are true, build, for each enabled precision, the
+# threads library (libfftw3_threads, etc) that uses the native threads
+# (POSIX or Windows) and/or the OpenMP library (libfftw3_omp, etc). Note
+# that both provide the same API and so a program links only one of them.
+#
+# On Windows the threads are instead combined into the precision library
+# since they use its internal functions, which a DLL does not export
+# (upstream's --with-combined-threads). Upstream does not support OpenMP in
+# this arrangement.
+#
+config [bool] config.libfftw3.threads ?= false
+config [bool] config.libfftw3.openmp  ?= false
+
+# If true, build with FFTW_DEBUG, which enables the extra consistency checks
+# and debugging output.
+#
+config [bool] config.libfftw3.debug ?= false
+
+# SIMD.
+#
+# Upstream compiles the codelets for each enabled instruction set and selects
+# the fastest at runtime, so the library still runs on processors without
+# them. Note that SIMD only applies to the single and double precisions.
+#
+# Upstream disables all of them by default while Debian and Fedora enable
+# SSE2, AVX, and AVX2 on x86_64 and NEON on aarch64, which is also our
+# default. We don't enable AVX2 on 32-bit x86 since upstream only supports it
+# on x86_64. AVX-512, the 128-bit AVX with AMD's FMA4, and the generic (GCC
+# vector extensions) SIMD are disabled by default, same as upstream.
+#
+x86     = $regex.match($c.target.cpu, 'i[3-6]86')
+x86_64  = ($c.target.cpu == 'x86_64')
+aarch64 = ($c.target.cpu == 'aarch64')
+
+config [bool] config.libfftw3.sse2            ?= ($x86 || $x86_64)
+config [bool] config.libfftw3.avx             ?= ($x86 || $x86_64)
+config [bool] config.libfftw3.avx2            ?= $x86_64
+config [bool] config.libfftw3.avx512          ?= false
+config [bool] config.libfftw3.avx_128_fma     ?= false
+config [bool] config.libfftw3.neon            ?= $aarch64
+config [bool] config.libfftw3.generic_simd128 ?= false
+config [bool] config.libfftw3.generic_simd256 ?= false
+
+# Verify the configuration is supported by upstream (see configure.ac).
+#
+# Note that the generic SIMD cannot be combined with the architecture-specific
+# one since both register the same solvers (the planner fails an assertion).
+#
+x86_simd = ($config.libfftw3.sse2   || \
+            $config.libfftw3.avx    || \
+            $config.libfftw3.avx2   || \
+            $config.libfftw3.avx512 || \
+            $config.libfftw3.avx_128_fma)
+
+generic_simd = ($config.libfftw3.generic_simd128 || \
+                $config.libfftw3.generic_simd256)
+
+assert (!$x86_simd || $x86 || $x86_64) \
+  "x86 SIMD is only supported on x86 and x86_64"
+
+assert (!$config.libfftw3.avx2 && !$config.libfftw3.avx512 || $x86_64) \
+  "AVX2 and AVX-512 are only supported on x86_64"
+
+assert (!$config.libfftw3.neon || $aarch64) \
+  "NEON is only supported on aarch64"
+
+# MSVC does not support AMD's FMA4 (which the codelets check for with the
+# __FMA4__ macro).
+#
+assert (!$config.libfftw3.avx_128_fma || $c.class == 'gcc') \
+  "AVX-128-FMA requires a GCC-class compiler"
+
+assert (!$generic_simd || $c.class == 'gcc') \
+  "generic SIMD requires a GCC-class compiler"
+
+assert (!$generic_simd || !$x86_simd && !$config.libfftw3.neon) \
+  "generic SIMD cannot be combined with x86 or NEON SIMD"
+
+# The quad precision API is only declared by fftw3.h for GCC on x86 and
+# x86_64 and requires libquadmath.
+#
+assert (!$config.libfftw3.quad_precision || \
+        $c.id == 'gcc' && ($x86 || $x86_64)) \
+  "quad precision requires GCC on x86 or x86_64"
+
+assert (!$config.libfftw3.openmp || $c.class == 'gcc') \
+  "OpenMP requires a GCC-class compiler"
+
+assert (!$config.libfftw3.openmp || $c.target.class != 'windows') \
+  "OpenMP is not supported on Windows"
