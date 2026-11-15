@@ -17,3 +17,13 @@
 # Use `binary` to make sure certain files are never auto-detected as text.
 #
 #*.png binary
+
+# Upstream source subdirectories that are symlinked as a whole.
+#
+libfftw3/libfftw3/api          symlink=dir
+libfftw3/libfftw3/dft          symlink=dir
+libfftw3/libfftw3/kernel       symlink=dir
+libfftw3/libfftw3/rdft         symlink=dir
+libfftw3/libfftw3/reodft       symlink=dir
+libfftw3/libfftw3/simd-support symlink=dir
+libfftw3/libfftw3/threads      symlink=dir
