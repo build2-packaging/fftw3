@@ -1,0 +1,7 @@
+: 1
+name: libfftw3
+version: 3.3.10
+language: c
+project: fftw3
+summary: Discrete Fourier transform C library
+license: GPL-2.0-or-later; GNU General Public License v2.0 or later.
