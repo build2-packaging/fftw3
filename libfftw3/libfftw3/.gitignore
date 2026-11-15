@@ -1,0 +1,4 @@
+# Precision directories and the Fortran interface (in source build).
+#
+/fftw3*/
+/fftw3.f03

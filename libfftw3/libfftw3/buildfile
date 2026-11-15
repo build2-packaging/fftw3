@@ -1,43 +1,367 @@
-intf_libs = # Interface dependencies.
-impl_libs = # Implementation dependencies.
-#import xxxx_libs += libhello%lib{hello}
+# Upstream builds the library from the same sources once for each precision
+# (see configure.ac and Makefile.am), with the precision selected by the
+# macros in config.h. We do the same by compiling the sources into a
+# separate output subdirectory for each precision (fftw3/, fftw3f/, fftw3l/,
+# and fftw3q/), each with its own config.h. The libraries are named after
+# their precision directories.
+#
+./: probes/
 
-lib{fftw3}: {h c}{**} $impl_libs $intf_libs
+include probes/
+
+# Sources.
+#
+# Exclude the SIMD codelets (see below) as well as the unused real-data DCT
+# and DST solvers that upstream does not build either.
+#
+srcs = c{api/* +kernel/* +dft/** +rdft/** +reodft/* +simd-support/* \
+         -dft/simd/** -rdft/simd/**                                 \
+         -reodft/redft00e-r2hc                                      \
+         -reodft/reodft11e-r2hc                                     \
+         -reodft/rodft00e-r2hc}
+
+hdrs = h{fftw3 api/* kernel/* dft/** rdft/** reodft/* simd-support/*}
+
+# The SIMD codelets are generated in simd/common/ and compiled for each
+# instruction set by the wrappers in simd/<isa>/ that #include them. Note
+# that upstream compiles the 128-bit AVX2 codelets (avx2-128/) as part of
+# AVX2.
+#
+simd = sse2 avx avx-128-fma avx2 avx2-128 avx512 neon \
+       generic-simd128 generic-simd256
+
+./: dft/simd/common/c{*} rdft/simd/common/c{*} # Distribute.
+
+# The threads and OpenMP libraries share all the sources except the
+# backend.
+#
+thr_srcs = threads/c{api conf ct dft-vrank-geq1 f77api hc2hc \
+                     rdft-vrank-geq1 vrank-geq1-rdft2}
+
+thr_hdrs = threads/h{*}
+
+# Output directories.
+#
+# Every directory of an object file needs an fsdir{} target with its parent
+# as a prerequisite since the precision directories are not scopes and so
+# they are not created automatically in the in source build.
+#
+dirs =
+for s: $srcs $thr_srcs threads/c{threads openmp}
+{
+  x = $directory($s)
+  dirs += $x $directory($x)
+}
+
+for i: $simd
+  dirs += dft/simd/$i/ rdft/simd/$i/ dft/simd/ rdft/simd/
+
+dirs = $sort([dir_paths] $dirs, dedup)
 
 # Build options.
+#
+# Upstream includes the internal headers relative to the source root and
+# config.h from the precision directory (see below).
 #
 out_pfx = [dir_path] $out_root/libfftw3/
 src_pfx = [dir_path] $src_root/libfftw3/
 
-c.poptions =+ "-I$out_pfx" "-I$src_pfx"
+c.poptions =+ "-I$src_pfx"
 
-#obja{*}: c.poptions += -DLIBFFTW3_STATIC_BUILD
-#objs{*}: c.poptions += -DLIBFFTW3_SHARED_BUILD
+if ($c.target.class != 'windows')
+  c.libs += -lm
+
+# On Windows the threads are combined into the precision libraries (see
+# root.build for details).
+#
+combined_threads = ($c.target.class == 'windows')
+
+# Configuration headers (see below).
+#
+using autoconf
+
+# Precisions.
+#
+for p: fftw3 fftw3f fftw3l fftw3q
+{
+  d = [dir_path] $p
+
+  single  = ($p == 'fftw3f')
+  ldouble = ($p == 'fftw3l')
+  quad    = ($p == 'fftw3q')
+
+  enabled = ($p == 'fftw3'                               || \
+             $single  && $config.libfftw3.single         || \
+             $ldouble && $config.libfftw3.long_double    || \
+             $quad    && $config.libfftw3.quad_precision)
+
+  # SIMD is only supported in the single and double precisions.
+  #
+  simd_ok = (!$ldouble && !$quad)
+
+  ./: lib{$p}: include = $enabled
+
+  for x: $dirs
+    fsdir{$d/$x}: fsdir{$d/$directory($x)}
+
+  lib{$p}: $hdrs $d/h{config}
+
+  for s: $srcs
+    lib{$p}: $d/$directory($s)/obj{$name($s)}: $s fsdir{$d/$directory($s)}
+
+  # Configuration header.
+  #
+  $d/h{config}: in{config} fsdir{$d}
+  {
+    VERSION = "$version.major.$version.minor.$version.patch"
+    FFTW_CC = "$c.id $c.version.major.$c.version.minor.$c.version.patch"
+
+    FFTW_SINGLE  = $single
+    FFTW_LDOUBLE = $ldouble
+    FFTW_QUAD    = $quad
+
+    HAVE_SSE2           = ($simd_ok && $config.libfftw3.sse2)
+    HAVE_AVX             = ($simd_ok && $config.libfftw3.avx)
+    HAVE_AVX2            = ($simd_ok && $config.libfftw3.avx2)
+    HAVE_AVX512          = ($simd_ok && $config.libfftw3.avx512)
+    HAVE_AVX_128_FMA     = ($simd_ok && $config.libfftw3.avx_128_fma)
+    HAVE_NEON            = ($simd_ok && $config.libfftw3.neon)
+    HAVE_GENERIC_SIMD128 = ($simd_ok && $config.libfftw3.generic_simd128)
+    HAVE_GENERIC_SIMD256 = ($simd_ok && $config.libfftw3.generic_simd256)
+
+    ARCH_PREFERS_FMA = $regex.match($c.target.cpu, \
+                                    '(powerpc|ia64|hppa|mips64).*')
+
+    FFTW_DEBUG = $config.libfftw3.debug
+
+    USING_POSIX_THREADS = ($c.target.class != 'windows')
+
+    # The counter is read with GCC-style inline assembly.
+    #
+    HAVE_ARMV8_CNTVCT_EL0 = ($aarch64 && $c.class == 'gcc')
+
+    autoconf.aliases  = SIZEOF_UNSIGNED_INT@SIZEOF_INT
+    autoconf.aliases += SIZEOF_UNSIGNED_LONG@SIZEOF_LONG
+    autoconf.aliases += SIZEOF_UNSIGNED_LONG_LONG@SIZEOF_LONG_LONG
+  }
+
+  # The probe results are only available during perform (see
+  # probes/buildfile for details).
+  #
+  if ($build.meta_operation == 'perform')
+  {
+    $d/h{config}:
+    {
+      HAVE_ALLOCA     = $(probes/ have_alloca)
+      HAVE_ALLOCA_H   = $(probes/ have_alloca_h)
+      HAVE_MALLOC_H   = $(probes/ have_malloc_h)
+      HAVE__MM_MALLOC = $(probes/ have_mm_malloc)
+    }
+  }
+
+  # SIMD codelets.
+  #
+  # Upstream compiles the codelets of each instruction set with the options
+  # that enable it and selects the codelets supported by the processor at
+  # runtime (see configure.ac for the options).
+  #
+  for i: $simd
+  {
+    v = config.libfftw3.$regex.replace(($i == 'avx2-128' ? avx2 : $i), \
+                                       '-', '_')
+
+    for s: dft/simd/$i/c{*} rdft/simd/$i/c{*}
+    {
+      o = $d/$directory($s)/obj{$name($s)}
+
+      lib{$p}: $o: include = ($simd_ok && $($v))
+      $o: $s fsdir{$d/$directory($s)}
+    }
+
+    switch $c.class, $i
+    {
+      case 'gcc', 'sse2'
+        f = ($single ? -msse : -msse2)
+      case 'gcc', 'avx'
+        f = -mavx
+      case 'gcc', 'avx-128-fma'
+        f = -mavx -mfma4
+      case 'gcc', 'avx2' | 'avx2-128'
+        f = -mavx2 -mfma
+      case 'gcc', 'avx512'
+        f = -mavx512f
+      case 'msvc', 'sse2'
+        f = ($x86 ? '/arch:SSE2' : )
+      case 'msvc', 'avx'
+        f = /arch:AVX
+      case 'msvc', 'avx2' | 'avx2-128'
+        f = /arch:AVX2
+      case 'msvc', 'avx512'
+        f = /arch:AVX512
+      default
+        f =
+    }
+
+    # GCC does not align the stack to more than 16 bytes on Windows (GCC bug
+    # 54412) and so the wider vectors that it spills may end up misaligned.
+    # Have the assembler turn the aligned vector moves into unaligned ones.
+    #
+    if ($c.id == 'gcc' && $c.target.class == 'windows' && $i != 'sse2')
+      f += -Wa,-muse-unaligned-vector-move
+
+    $d/dft/simd/$i/
+    {
+      c.coptions += $f
+    }
+
+    $d/rdft/simd/$i/
+    {
+      c.coptions += $f
+    }
+  }
+
+  # Multi-threading libraries.
+  #
+  # Note that these libraries call the internal functions of the precision
+  # library and their consumers also need the precision library. On Windows
+  # we instead combine the threads into the precision library (see
+  # root.build for details).
+  #
+  ./: lib{$(p)_threads}: include = ($enabled                 && \
+                                    $config.libfftw3.threads && \
+                                    !$combined_threads)
+
+  ./: lib{$(p)_omp}: include = ($enabled && $config.libfftw3.openmp)
+
+  thr_objs =
+  for s: $thr_srcs
+    thr_objs += $d/threads/obj{$name($s)}
+
+  lib{$p}: $thr_objs $d/threads/obj{threads}: \
+    include = ($combined_threads && $config.libfftw3.threads)
+
+  lib{$(p)_threads}: $thr_objs $d/threads/obj{threads} $thr_hdrs lib{$p}
+  lib{$(p)_omp}:     $thr_objs $d/threads/obj{openmp}  $thr_hdrs lib{$p}
+
+  for s: $thr_srcs threads/c{threads openmp}
+    $d/threads/obj{$name($s)}: $s fsdir{$d/threads/}
+
+  if ($c.target.class != 'windows')
+    lib{$(p)_threads}: c.libs += -pthread
+
+  if ($c.class == 'gcc')
+  {
+    $d/threads/obj{openmp}: c.coptions += -fopenmp
+    lib{$(p)_omp}: c.libs += -fopenmp
+  }
+
+  lib{$(p)_threads $(p)_omp}: c.export.libs = lib{$p}
+
+  if $quad
+    lib{$p}: c.libs += -lquadmath
+
+  $d/
+  {
+    # The precision's config.h.
+    #
+    c.poptions =+ "-I$out_base"
+
+    # On Windows the API is exported from the DLL if FFTW_DLL is defined
+    # (see api/fftw3.h).
+    #
+    if ($c.target.class == 'windows')
+      objs{*}: c.poptions += -DFFTW_DLL
+  }
+}
 
 # Export options.
 #
+# Note that on Windows the consumers of the DLL also need FFTW_DLL for
+# fftw3.h to declare the API with __declspec(dllimport).
+#
 lib{fftw3}:
 {
-  c.export.poptions = "-I$out_pfx" "-I$src_pfx"
-  c.export.libs = $intf_libs
+  c.export.poptions = "-I$src_pfx"
+
+  export.metadata = 1 libfftw3
+
+  libfftw3.single         = [bool] $config.libfftw3.single
+  libfftw3.long_double    = [bool] $config.libfftw3.long_double
+  libfftw3.quad_precision = [bool] $config.libfftw3.quad_precision
+  libfftw3.threads        = [bool] $config.libfftw3.threads
+  libfftw3.openmp         = [bool] $config.libfftw3.openmp
+
+  # True if the threads API is provided by the precision libraries (see
+  # config.libfftw3.threads for details).
+  #
+  libfftw3.combined_threads = [bool] $combined_threads
 }
 
-#liba{fftw3}: c.export.poptions += -DLIBFFTW3_STATIC
-#libs{fftw3}: c.export.poptions += -DLIBFFTW3_SHARED
+lib{fftw3f fftw3l fftw3q}: c.export.poptions = "-I$src_pfx"
 
-# For pre-releases use the complete version to make sure they cannot
-# be used in place of another pre-release or the final version. See
-# the version module for details on the version.* variable values.
+if ($c.target.class == 'windows')
+  libs{fftw3 fftw3f fftw3l fftw3q}: c.export.poptions += -DFFTW_DLL
+
+# Upstream keeps the ABI backwards-compatible across the releases of the
+# same major version and so we only embed the major version component into
+# the shared library name (libfftw3-3.dll, as upstream does on Windows).
+#
+# On Linux we follow upstream's libtool naming, which uses the libtool
+# version for the file name and its major component for the soname
+# (libfftw3.so.3.6.10 and libfftw3.so.3). Note that this version is
+# unrelated to the release version (see SHARED_VERSION_INFO in
+# configure.ac).
+#
+# For pre-releases use the complete version to make sure they cannot be used
+# in place of another pre-release or the final version. See the version
+# module for details on the version.* variable values.
 #
 if $version.pre_release
-  lib{fftw3}: bin.lib.version = "-$version.project_id"
+  lib{*}: bin.lib.version = @"-$version.project_id"
 else
-  lib{fftw3}: bin.lib.version = "-$version.major.$version.minor"
+  lib{*}: bin.lib.version = @"-3" linux@"3.6.10"
 
-# Install recreating subdirectories.
+# Fortran interface (fftw3.f03). Upstream generates it from fftw3.f03.in by
+# adding the C_FFTW_R2R_KIND parameter, which is the C type of the
+# fftw_r2r_kind enum (a 32-bit integer on every supported target).
 #
-h{*}:
+file{fftw3.f03}: api/file{fftw3.f03.in}
+{{
+  diag gen ($<)
+
+  i = $path($<)
+  o = $path($>)
+
+  echo '! Generated automatically.  DO NOT EDIT!' >$o
+  echo '' >>$o
+  echo '  integer, parameter :: C_FFTW_R2R_KIND = C_INT32_T' >>$o
+  sed -n -e 's/^(?!.*Generated automatically)(.*)$/\1/p' $i >>$o
+}}
+
+./: api/file{fftw3.f fftw3l.f03 fftw3q.f03} file{fftw3.f03}
+
+# Install only the public headers (fftw3.h and the Fortran interface) into,
+# say, /usr/include/, as upstream does.
+#
+h{*}: install = false
+
+h{fftw3}@./: install = include/
+
+file{fftw3.f03}: install = include/
+
+api/
 {
-  install         = include/
-  install.subdirs = true
+  file{fftw3.f}@./ file{fftw3l.f03}@./ file{fftw3q.f03}@./: install = include/
+}
+
+# Install the pkg-config files under upstream's names (fftw3.pc, etc).
+#
+for n: fftw3 fftw3f fftw3l fftw3q
+{
+  for l: $n $(n)_threads $(n)_omp
+  {
+    pc{~"/$l/"}:  install = "pkgconfig/$(l).pc"
+    pca{~"/$l/"}: install = "pkgconfig/$(l).static.pc"
+    pcs{~"/$l/"}: install = "pkgconfig/$(l).shared.pc"
+  }
 }
