@@ -1,0 +1,6 @@
+$out_root/
+{
+  include libfftw3/
+}
+
+export $out_root/libfftw3/$import.target

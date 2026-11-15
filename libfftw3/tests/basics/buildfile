@@ -1,0 +1,3 @@
+import libs = libfftw3%lib{fftw3}
+
+exe{driver}: {h c}{**} $libs testscript{**}
