@@ -1,6 +1,6 @@
 : 1
 name: libfftw3
-version: 3.3.10-a.0.z
+version: 3.3.10
 language: c
 project: fftw3
 summary: Discrete Fourier transform C library
