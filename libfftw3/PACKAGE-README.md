@@ -119,7 +119,9 @@ This package provides the following configuration variables:
 
 The `single`, `long_double`, and `quad_precision` variables can be used to
 enable the corresponding precision libraries. Note that quad precision
-requires GCC on x86 or x86_64 as well as `libquadmath`.
+requires GCC on x86 or x86_64 as well as `libquadmath`, which some
+distributions package separately from GCC (for example,
+`libquadmath-devel` on Fedora).
 
 The `threads` and `openmp` variables can be used to enable, for each
 enabled precision, the threads and OpenMP libraries, respectively. Note
