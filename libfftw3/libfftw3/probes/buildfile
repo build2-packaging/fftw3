@@ -1,0 +1,47 @@
+# Configuration probes.
+#
+# Upstream discovers what the compiler and the C library provide by
+# compiling and linking test programs (see configure.ac). Most of these
+# checks are available as the autoconf module's builtin checks, which are
+# based on the platform and compiler instead (see config.h.in for details).
+# The remaining ones are translated into probes that are compiled during
+# load together with a control variant (see the "How do I implement
+# autoconf-style configuration probing?" build2 HOWTO for background). The
+# results are made available as have_* variables in this scope and are
+# substituted into config.h by the parent buildfile.
+#
+source $src_root/build/probe.build
+
+# Headers.
+#
+# Note that the autoconf module's builtin HAVE_ALLOCA_H check is only
+# available since version 0.5.0.
+#
+probes =
+
+for h: alloca malloc
+{
+  buildfile{have-$h-h}:
+  probes += buildfile{have-$h-h}
+}
+
+# C probes.
+#
+for p: alloca mm-malloc
+{
+  buildfile{have-$p}: c{have-$p}
+  probes += buildfile{have-$p}
+}
+
+./: $probes # Make sure gets cleaned.
+
+# We only need the results to generate config.h and so we limit probing to
+# the perform meta-operation (for example, to avoid surprising compilations
+# during configure). Elsewhere the results stay undefined since config.h is
+# not generated.
+#
+if ($build.meta_operation == 'perform')
+{
+  update $probes
+  source $path($probes)
+}

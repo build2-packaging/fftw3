@@ -1,0 +1,119 @@
+// The FFTW configuration header. Upstream produces it with Autotools (see
+// configure.ac). We generate it with the autoconf module once for each
+// precision: the configuration and the results of the probes in probes/ are
+// substituted by the buildfile while the rest are the module's builtin
+// expectation-based checks.
+//
+// Note that we only list the macros that the library uses. The ones for the
+// platforms, instruction sets, and cycle counters we don't support (AltiVec,
+// VSX, Knights Corner, etc) as well as for the upstream options we don't
+// expose (Fortran mangling, slow timer, own aligned malloc(), etc) are left
+// undefined, which is upstream's default.
+//
+
+// Package information. Note that the wisdom file preamble contains the
+// version and so we must use upstream's package name and version (see
+// kernel/planner.c).
+//
+#define PACKAGE "fftw"
+#define VERSION "@VERSION@"
+#define PACKAGE_VERSION "@VERSION@"
+
+// The compiler that built the library (fftw_cc in api/version.c). Upstream
+// records the compiler command line while we only record the compiler and
+// its version.
+//
+#define FFTW_CC "@FFTW_CC@"
+
+// Precision (double unless one of these is defined).
+//
+#undef FFTW_SINGLE
+#undef FFTW_LDOUBLE
+#undef FFTW_QUAD
+
+// SIMD codelets. Note that these are not the autoconf module's builtin
+// checks of the same name (which test whether the compiler targets the
+// instruction set): they are enabled by the configuration and the library
+// detects the processor support at runtime.
+//
+#undef HAVE_SSE2
+#undef HAVE_AVX
+#undef HAVE_AVX2
+#undef HAVE_AVX512
+#undef HAVE_AVX_128_FMA
+#undef HAVE_NEON
+#undef HAVE_GENERIC_SIMD128
+#undef HAVE_GENERIC_SIMD256
+
+// Upstream enables the use of fused multiply-add on PowerPC, IA-64, PA-RISC,
+// and MIPS64 (see configure.ac).
+//
+#undef ARCH_PREFERS_FMA
+
+// Extra consistency checks and debugging output.
+//
+#undef FFTW_DEBUG
+
+// Use POSIX threads in the threads library (Windows threads otherwise).
+//
+#undef USING_POSIX_THREADS
+
+// Use alloca() for temporary buffers if available (enabled by default by
+// upstream).
+//
+#define FFTW_ENABLE_ALLOCA 1
+
+#undef HAVE_ALLOCA
+#undef HAVE_ALLOCA_H
+
+// Aligned memory allocation (kernel/kalloc.c).
+//
+#undef HAVE_MALLOC_H
+#undef HAVE_MEMALIGN
+#undef HAVE_POSIX_MEMALIGN
+#undef HAVE__MM_MALLOC
+
+// Upstream requires C99 and so these are always available. Note that
+// SIZEOF_FLOAT and SIZEOF_DOUBLE are only used to detect that double is
+// twice the size of float, which holds for the IEEE 754 formats of every
+// supported target.
+//
+// Note also that we leave the HAVE_DECL_* macros (memalign(), sinl(), etc)
+// undefined since every C library that provides these functions also
+// declares them, in which case upstream defines them to 1 (they only serve
+// to provide the missing declarations otherwise).
+//
+#define HAVE_ABORT 1
+#define HAVE_STRING_H 1
+#define HAVE_INTTYPES_H 1
+
+#define SIZEOF_FLOAT 4
+#define SIZEOF_DOUBLE 8
+
+// Integer types (kernel/ifftw.h).
+//
+#undef HAVE_STDINT_H
+#undef HAVE_SYS_TYPES_H
+#undef HAVE_UINTPTR_T
+
+#undef SIZEOF_UNSIGNED_INT
+#undef SIZEOF_UNSIGNED_LONG
+#undef SIZEOF_UNSIGNED_LONG_LONG
+#undef SIZEOF_VOID_P
+
+// Timers. Note that the planner measures the candidate plans with the
+// processor's cycle counter (see kernel/cycle.h) and, if there is none,
+// only estimates them. On aarch64 we use the virtual counter (CNTVCT_EL0),
+// which is readable from user space (Fedora does the same).
+//
+#undef HAVE_UNISTD_H
+#undef HAVE_SYS_TIME_H
+#undef HAVE_GETTIMEOFDAY
+#undef HAVE_CLOCK_GETTIME
+#undef HAVE_MACH_ABSOLUTE_TIME
+#undef HAVE_MACH_MACH_TIME_H
+#undef HAVE_ARMV8_CNTVCT_EL0
+
+#ifdef HAVE_SYS_TIME_H
+#  define TIME_WITH_SYS_TIME 1
+#endif
