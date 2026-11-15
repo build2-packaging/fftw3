@@ -281,9 +281,18 @@ for p: fftw3 fftw3f fftw3l fftw3q
   if ($c.target.class != 'windows')
     lib{$(p)_threads}: c.libs += -pthread
 
+  # Note that GCC ignores the OpenMP pragmas when compiling the source that
+  # we have preprocessed with -fdirectives-only (and so the library would
+  # silently run serially). So we compile from the original source.
+  #
   if ($c.class == 'gcc')
   {
-    $d/threads/obj{openmp}: c.coptions += -fopenmp
+    $d/threads/obj{openmp}:
+    {
+      c.coptions += -fopenmp
+      cc.reprocess = true
+    }
+
     lib{$(p)_omp}: c.libs += -fopenmp
   }
 
